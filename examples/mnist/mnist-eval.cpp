@@ -15,10 +15,21 @@
 #pragma warning(disable: 4244 4267) // possible loss of data
 #endif
 
+#define PROJ_ROOT "/home/lyq/llama/ggml"
+
 int main(int argc, char ** argv) {
     srand(time(NULL));
     ggml_time_init();
-
+    if (argc == 1){
+        argc = 4;
+        const char ** argv_new = new const char *[argc];       
+        argv_new[0] = argv[0];
+        argv_new[1] = PROJ_ROOT "/examples/mnist/mnist-fc-f32.gguf";
+        argv_new[2] = PROJ_ROOT "/examples/mnist/data/MNIST/raw/t10k-images-idx3-ubyte";
+        argv_new[3] = PROJ_ROOT "/examples/mnist/data/MNIST/raw/t10k-labels-idx1-ubyte";
+        argv = const_cast<char **>(argv_new);
+    }
+    
     if (argc != 4) {
         fprintf(stderr, "Usage: %s mnist-fc-f32.gguf data/MNIST/raw/t10k-images-idx3-ubyte data/MNIST/raw/t10k-labels-idx1-ubyte\n", argv[0]);
         exit(1);
