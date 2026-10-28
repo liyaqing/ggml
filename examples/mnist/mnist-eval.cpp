@@ -15,7 +15,7 @@
 #pragma warning(disable: 4244 4267) // possible loss of data
 #endif
 
-#define PROJ_ROOT "/home/lyq/llama/ggml"
+#define PROJ_ROOT "/home/User/projects/ggml" // Change this to actual ggml root directory
 
 int main(int argc, char ** argv) {
     srand(time(NULL));
@@ -41,7 +41,7 @@ int main(int argc, char ** argv) {
         return 1;
     }
 
-    std::vector<float> labels;
+    std::vector<float> labels; // One-hot encoded labels
     labels.resize(MNIST_NTEST*MNIST_NCLASSES);
     if (!mnist_label_load(argv[3], labels.data(), MNIST_NTEST)) {
         return 1;

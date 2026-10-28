@@ -62,7 +62,7 @@ bool mnist_label_load(const std::string & fname, float * buf, const int nex) {
     for (int iex = 0; iex < nex; ++iex) {
         fin.read((char *) &label, sizeof(label));
 
-        for (int i = 0; i < MNIST_NCLASSES; ++i) {
+        for (int i = 0; i < MNIST_NCLASSES; ++i) { // One-hot encoding
             buf[iex*MNIST_NCLASSES + i] = i == label ? 1.0f : 0.0f;
         }
     }
@@ -137,8 +137,8 @@ mnist_eval_result mnist_graph_eval(const std::string & fname, const float * imag
             }
 
             result.loss.push_back(*ggml_get_data_f32(loss));
+            
         }
-
         const int64_t t_total_us = ggml_time_us() - t_start_us;
         const double t_total_ms = 1e-3*t_total_us;
         fprintf(stderr, "%s: model evaluation on %d images took %.2lf ms, %.2lf us/image\n",
@@ -311,7 +311,7 @@ void mnist_model_build(mnist_model & model, const int nbatch) {
     model.nbatch = nbatch;
 
     if (model.arch == "mnist-fc") {
-        ggml_set_param(model.ctx_compute, model.fc1_weight);
+        ggml_set_param(model.ctx_compute, model.fc1_weight); // 设置这些张量为参数类型，梯度设置为对应的张量
         ggml_set_param(model.ctx_compute, model.fc1_bias);
         ggml_set_param(model.ctx_compute, model.fc2_weight);
         ggml_set_param(model.ctx_compute, model.fc2_bias);
@@ -324,7 +324,7 @@ void mnist_model_build(mnist_model & model, const int nbatch) {
             ggml_mul_mat(model.ctx_compute, model.fc1_weight, model.images),
             model.fc1_bias));
         model.logits = ggml_add(model.ctx_compute,
-            ggml_mul_mat(model.ctx_compute, model.fc2_weight, fc1),
+            ggml_mul_mat(model.ctx_compute, model.fc2_weight, fc1), // 生成矩阵乘法的张量
             model.fc2_bias);
     } else if (model.arch == "mnist-cnn") {
         ggml_set_param(model.ctx_compute, model.conv1_kernel);

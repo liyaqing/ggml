@@ -234,13 +234,13 @@
 #define GGML_MAX_N_THREADS      512
 
 #endif
-#define GGML_MAX_OP_PARAMS      64
+#define GGML_MAX_OP_PARAMS      64 //这个不是最大参数数量，而是算子参数的字节数
 #define GGML_DEFAULT_N_THREADS  4
 #define GGML_DEFAULT_GRAPH_SIZE 2048
 #if UINTPTR_MAX == 0xFFFFFFFF
     #define GGML_MEM_ALIGN 4
 #else
-    #define GGML_MEM_ALIGN 16
+    #define GGML_MEM_ALIGN 16 // 方便SIMD优化
 #endif
 
 #define GGML_EXIT_SUCCESS 0
@@ -570,15 +570,15 @@ extern "C" {
     };
 
     enum ggml_tensor_flag {
-        GGML_TENSOR_FLAG_INPUT  = 1,
+        GGML_TENSOR_FLAG_INPUT  = 1, // 输入类型
         GGML_TENSOR_FLAG_OUTPUT = 2,
-        GGML_TENSOR_FLAG_PARAM  = 4,
+        GGML_TENSOR_FLAG_PARAM  = 4, // 参数类型
     };
 
     // ggml object
     struct ggml_object {
-        size_t offs;
-        size_t size;
+        size_t offs; // 数据开始的偏移量，单位是字节，相对于ggml_context的mem_buffer的起始位置
+        size_t size; // 数据的大小，单位是字节
 
         struct ggml_object * next;
 
@@ -591,34 +591,35 @@ extern "C" {
 
     // n-dimensional tensor
     struct ggml_tensor {
-        enum ggml_type         type;
+        enum ggml_type         type; // 张量的数据类型
 
         GGML_DEPRECATED(enum ggml_backend_type backend, "use the buffer type to find the storage location of the tensor");
 
-        struct ggml_backend_buffer * buffer;
+        struct ggml_backend_buffer * buffer; // 存放张量数据的缓冲区（和具体设备有关系）
 
         int64_t ne[GGML_MAX_DIMS]; // number of elements
         size_t  nb[GGML_MAX_DIMS]; // stride in bytes:
-                                   // nb[0] = ggml_type_size(type)
+                                   // nb[0] = ggml_type_size(type), 一个量化块的大小，这里是以量化快为单位的
+                                   //                               不是严格意义上的一个元素的字节数
                                    // nb[1] = nb[0]   * (ne[0] / ggml_blck_size(type)) + padding
                                    // nb[i] = nb[i-1] * ne[i-1]
 
         // compute data
-        enum ggml_op op;
+        enum ggml_op op; // 算子类型
 
         // op params - allocated as int32_t for alignment
         int32_t op_params[GGML_MAX_OP_PARAMS / sizeof(int32_t)];
 
         int32_t flags;
 
-        struct ggml_tensor * grad;
-        struct ggml_tensor * src[GGML_MAX_SRC];
+        struct ggml_tensor * grad; // gradient tensor
+        struct ggml_tensor * src[GGML_MAX_SRC]; // source tensors for the operation that produced this tensor
 
         // source tensor and offset for views
-        struct ggml_tensor * view_src;
-        size_t               view_offs;
+        struct ggml_tensor * view_src; // 关联的源张量，如果这个张量是一个视图的话
+        size_t               view_offs; // 视图张量的偏移量，单位是字节，相对于view_src的data的起始位置
 
-        void * data;
+        void * data; // 实际的数据存储区域
 
         char name[GGML_MAX_NAME];
 

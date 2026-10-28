@@ -3446,9 +3446,9 @@ int ggml_n_dims(const struct ggml_tensor * tensor) {
 static inline bool ggml_can_mul_mat(const struct ggml_tensor * t0, const struct ggml_tensor * t1) {
     static_assert(GGML_MAX_DIMS == 4, "GGML_MAX_DIMS is not 4 - update this function");
 
-    return (t0->ne[0]           == t1->ne[0])  &&
-           (t1->ne[2]%t0->ne[2] == 0)          && // verify t0 is broadcastable
-           (t1->ne[3]%t0->ne[3] == 0);
+    return (t0->ne[0]           == t1->ne[0])  && //计算的时候会对t1进行转置，所以t0的列数必须等于t1的列数
+           (t1->ne[2]%t0->ne[2] == 0)          && // verify t0 is broadcastable，这个主要是为了batch
+           (t1->ne[3]%t0->ne[3] == 0); 
 }
 
 static inline bool ggml_can_out_prod(const struct ggml_tensor * t0, const struct ggml_tensor * t1) {
@@ -3501,7 +3501,7 @@ size_t ggml_tensor_overhead(void) {
     return GGML_OBJECT_SIZE + GGML_TENSOR_SIZE;
 }
 
-GGML_CALL bool ggml_is_transposed(const struct ggml_tensor * tensor) {
+GGML_CALL bool ggml_is_transposed(const struct ggml_tensor * tensor) { // 判断是否被转置过
     return tensor->nb[0] > tensor->nb[1];
 }
 
@@ -3830,7 +3830,7 @@ static void ggml_scratch_load(struct ggml_context * ctx) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-
+// 从ggml_context的mem_buffer中分配一个新的ggml_object（附带size大小的空间），并将其插入到对象链表中。返回指向新对象的指针。
 static struct ggml_object * ggml_new_object(struct ggml_context * ctx, enum ggml_object_type type, size_t size) {
     // always insert objects at the end of the context's memory pool
     struct ggml_object * obj_cur = ctx->objects_end;
@@ -3840,7 +3840,7 @@ static struct ggml_object * ggml_new_object(struct ggml_context * ctx, enum ggml
     const size_t cur_end  = cur_offs + cur_size;
 
     // align to GGML_MEM_ALIGN
-    size_t size_needed = GGML_PAD(size, GGML_MEM_ALIGN);
+    size_t size_needed = GGML_PAD(size, GGML_MEM_ALIGN); // 
 
     char * const mem_buffer = ctx->mem_buffer;
     struct ggml_object * const obj_new = (struct ggml_object *)(mem_buffer + cur_end);
@@ -3951,7 +3951,7 @@ static struct ggml_tensor * ggml_new_tensor_impl(
         /*.src          =*/ { NULL },
         /*.view_src     =*/ view_src,
         /*.view_offs    =*/ view_offs,
-        /*.data         =*/ obj_alloc_size > 0 ? (void *)(result + 1) : data,
+        /*.data         =*/ obj_alloc_size > 0 ? (void *)(result + 1) : data, // 有数据分配时，数据紧跟在ggml_tensor结构体之后，否则使用传入的data指针
         /*.name         =*/ { 0 },
         /*.extra        =*/ NULL,
         ///*.padding      =*/ { 0 },
@@ -22050,7 +22050,7 @@ struct gguf_context {
     size_t size;      // size of `data` in bytes
 
     //uint8_t * padding;
-    void * data;
+    void * data; // 指向实际的数据区域，不包含最前面的obj和tensor结构
 };
 
 static size_t gguf_type_size(enum gguf_type type) {
@@ -22345,7 +22345,7 @@ struct gguf_context * gguf_init_from_file(const char * fname, struct gguf_init_p
                 fclose(file);
                 gguf_free(ctx);
                 return NULL;
-            }
+            } 
         }
     }
 
@@ -22364,7 +22364,7 @@ struct gguf_context * gguf_init_from_file(const char * fname, struct gguf_init_p
             offset += ctx->alignment - offset_pad;
             fseek(file, offset, SEEK_SET);
         }
-    }
+    } //tensor开始地址应该是alignment对齐的
 
     // store the current file offset - this is where the data section starts
     ctx->offset = offset;
@@ -22389,7 +22389,7 @@ struct gguf_context * gguf_init_from_file(const char * fname, struct gguf_init_p
                 return NULL;
             }
 
-            const size_t size_cur = ggml_row_size(info->type, ne);
+            const size_t size_cur = ggml_row_size(info->type, ne); // 这个张量的大小，和row没什么关系
 
             ctx->size += GGML_PAD(size_cur, ctx->alignment);
         }
@@ -22421,9 +22421,9 @@ struct gguf_context * gguf_init_from_file(const char * fname, struct gguf_init_p
             return NULL;
         }
 
-        struct ggml_context * ctx_data = *params.ctx;
+          struct ggml_context * ctx_data = *params.ctx;
 
-        struct ggml_tensor * data = NULL;
+         struct ggml_tensor * data = NULL;
 
         if (!params.no_alloc) {
             data = ggml_new_tensor_1d(ctx_data, GGML_TYPE_I8, ctx->size);
@@ -22431,7 +22431,7 @@ struct gguf_context * gguf_init_from_file(const char * fname, struct gguf_init_p
             ok = ok && data != NULL;
 
             // read the binary blob with the tensor data
-            ok = ok && gguf_fread_el(file, data->data, ctx->size, &offset);
+            ok = ok && gguf_fread_el(file, data->data, ctx->size, &offset); // ctx->size 不包含obj和tensor数据结构的大小
 
             if (!ok) {
                 fprintf(stderr, "%s: failed to read tensor data\n", __func__);
@@ -22444,7 +22444,8 @@ struct gguf_context * gguf_init_from_file(const char * fname, struct gguf_init_p
             ctx->data = data->data;
         }
 
-        ggml_set_no_alloc(ctx_data, true);
+        ggml_set_no_alloc(ctx_data, true); // 临时设置为true，因为下面的tensor都是直接
+                                           // 指向前面1d的tensor中的数据区域的，不需要再分配内存
 
         // create the tensors
         for (uint64_t i = 0; i < ctx->header.n_tensors; ++i) {
@@ -22454,7 +22455,7 @@ struct gguf_context * gguf_init_from_file(const char * fname, struct gguf_init_p
                 ctx->infos[i].ne[2],
                 ctx->infos[i].ne[3],
             };
-
+            // 从ctx_data中创建一个新的tensor，类型为ctx->infos[i].type，维度为ctx->infos[i].n_dims
             struct ggml_tensor * cur = ggml_new_tensor(ctx_data, ctx->infos[i].type, ctx->infos[i].n_dims, ne);
 
             ok = ok && cur != NULL;
@@ -22466,7 +22467,7 @@ struct gguf_context * gguf_init_from_file(const char * fname, struct gguf_init_p
             ggml_set_name(cur, ctx->infos[i].name.data);
 
             // point the data member to the appropriate location in the binary blob using the tensor infos
-            if (!params.no_alloc) {
+            if (!params.no_alloc) { // 将这个tensor的data指针指向前面1d的tensor中的对应区域
               //cur->data = (char *) data->data + ctx->infos[i].offset - ctx->offset; // offset from start of file
                 cur->data = (char *) data->data + ctx->infos[i].offset;               // offset from data
             }
